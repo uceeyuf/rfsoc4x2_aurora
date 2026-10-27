@@ -50,7 +50,7 @@ always @(posedge clk100) begin
 end
 wire        vio_reset_pb, vio_pma_init;
 wire [2:0]  vio_loopback;
-wire        vio_snap, vio_clear, vio_inject;
+wire        vio_snap, vio_clear, vio_inject, vio_rx_rev;
 wire        pma_init = !por[25] && !por[24] || vio_pma_init;
 wire        reset_pb = !por[25] || vio_reset_pb;
 
@@ -80,7 +80,8 @@ aurora_qsfp_support aurora_i (
 );
 
 // ---------------------------------------------------------------- user clock: VIO requests in
-wire snap_u, clear_u, inject_u;
+wire snap_u, clear_u, inject_u, rx_rev_u;
+xpm_cdc_single #(.DEST_SYNC_FF(3), .INIT_SYNC_FF(1), .SRC_INPUT_REG(0)) rev_cdc (.src_clk(1'b0), .src_in(vio_rx_rev), .dest_clk(user_clk), .dest_out(rx_rev_u));
 xpm_cdc_single #(.DEST_SYNC_FF(3), .INIT_SYNC_FF(1), .SRC_INPUT_REG(0)) snap_cdc (.src_clk(1'b0), .src_in(vio_snap), .dest_clk(user_clk), .dest_out(snap_u));
 xpm_cdc_single #(.DEST_SYNC_FF(3), .INIT_SYNC_FF(1), .SRC_INPUT_REG(0)) clear_cdc (.src_clk(1'b0), .src_in(vio_clear), .dest_clk(user_clk), .dest_out(clear_u));
 xpm_cdc_single #(.DEST_SYNC_FF(3), .INIT_SYNC_FF(1), .SRC_INPUT_REG(0)) inject_cdc (.src_clk(1'b0), .src_in(vio_inject), .dest_clk(user_clk), .dest_out(inject_u));
@@ -96,10 +97,18 @@ always @(posedge user_clk) rst_u <= sys_reset || !channel_up;
 
 prbs31_tx tx_i (.clk(user_clk), .rst(rst_u), .ready(tx_ready && channel_up), .inject(inject_p), .data(tx_data), .valid(tx_valid));
 
+// (vio rx_rev) the received word's four 64-bit lanes in reverse order: an SR4 module with an MPO loopback plug brings TX lane
+// l back on RX lane 3 - l (measured with rfsoc4x2_ibert); Aurora 64B/66B deskews the lanes but does not reorder them
+reg  [0:255] rx_chk = 256'd0;
+reg          rx_chk_v = 1'b0;
+always @(posedge user_clk) begin
+    rx_chk_v <= rx_valid;
+    rx_chk <= rx_rev_u ? {rx_data[192:255], rx_data[128:191], rx_data[64:127], rx_data[0:63]} : rx_data;
+end
 wire        locked;
 wire [47:0] rx_words, err_bits, err_words;
 wire [31:0] lock_lost;
-prbs31_rx rx_i (.clk(user_clk), .rst(rst_u), .clear(clear_p), .valid(rx_valid), .data(rx_data),
+prbs31_rx rx_i (.clk(user_clk), .rst(rst_u), .clear(clear_p), .valid(rx_chk_v), .data(rx_chk),
                 .locked(locked), .words(rx_words), .err_bits(err_bits), .err_words(err_words), .lock_lost(lock_lost));
 
 // ---------------------------------------------------------------- user clock: counters (since the last clear)
@@ -135,7 +144,7 @@ wire [7:0] st_s;
 xpm_cdc_array_single #(.DEST_SYNC_FF(3), .INIT_SYNC_FF(1), .SRC_INPUT_REG(0), .WIDTH(8)) st_cdc (.src_clk(1'b0), .src_in(st_u), .dest_clk(clk100), .dest_out(st_s));
 wire ack_s;
 xpm_cdc_single #(.DEST_SYNC_FF(3), .INIT_SYNC_FF(1), .SRC_INPUT_REG(0)) ack_cdc (.src_clk(1'b0), .src_in(snap_ack), .dest_clk(clk100), .dest_out(ack_s));
-wire [7:0] st100 = {qsfp0_intl, qsfp0_modprsl, mmcm_not_locked, gt_pll_lock, 1'b0, pma_init, reset_pb, ack_s};
+wire [7:0] st100 = {qsfp0_intl, qsfp0_modprsl, mmcm_not_locked, gt_pll_lock, vio_rx_rev, pma_init, reset_pb, ack_s};
 
 vio_aurora vio_i (
     .clk(clk100),
@@ -156,7 +165,8 @@ vio_aurora vio_i (
     .probe_out2(vio_loopback),
     .probe_out3(vio_snap),
     .probe_out4(vio_clear),
-    .probe_out5(vio_inject)
+    .probe_out5(vio_inject),
+    .probe_out6(vio_rx_rev)
 );
 
 endmodule

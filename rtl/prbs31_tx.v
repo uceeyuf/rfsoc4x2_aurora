@@ -23,16 +23,17 @@ reg  [30:0] state = 31'h7FFFFFFF;
 reg         inj_pend = 1'b0;
 wire [255:0] nxt = prbs31_next(state);
 
+// (a request in the same cycle as a new word goes into that word: with ready high nearly every cycle, clearing the pending
+// flag after setting it lost every request on the board, 2026-10-27)
 always @(posedge clk) begin
-    if (inject) inj_pend <= 1'b1;
     if (rst) begin
         state <= 31'h7FFFFFFF; valid <= 1'b0; inj_pend <= 1'b0;
     end else if (!valid || ready) begin
-        data <= nxt ^ {255'd0, inj_pend};
+        data <= nxt ^ {255'd0, inj_pend || inject};
         state <= nxt[255:225];
         valid <= 1'b1;
         inj_pend <= 1'b0;
-    end
+    end else if (inject) inj_pend <= 1'b1;
 end
 
 endmodule

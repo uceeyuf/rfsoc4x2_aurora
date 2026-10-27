@@ -1,19 +1,24 @@
 # Aurora 100G link test on the RFSoC 4x2 (QSFP28, PRBS31 over the channel), read through the VIO.
 #
-#   vivado -mode batch -source tests/aurora_test.tcl [-tclargs <seconds> [loopback] [noprog]]
+#   vivado -mode batch -source tests/aurora_test.tcl [-tclargs <seconds> [loopback] [rev | norev] [noprog]]
 #
 #   seconds   measurement time (default 10), one line a second
 #   loopback  0 (default): through the QSFP28 (a loopback module, or the other end); 2: the GTs' near-end PMA
 #             loopback (no module needed: checks the design and the board)
+#   rev       the received lanes in reverse order (an SR4 module with an MPO loopback plug brings TX lane l back on RX lane
+#             3 - l: Aurora deskews the lanes but does not reorder them); norev: in order; default: in order, and reversed
+#             if the checker does not lock that way
 #   noprog    the FPGA already programmed (skips programming)
 # Programs prebuilt/rfsoc4x2_aurora.bit (or build/fpga.bit), restarts the link, waits for channel up, clears the counters,
 # then prints per second: the payload rate, the bit errors and the BER of the PRBS31 checker; at the end one error is
 # injected at the transmitter to show that the checker counts it. Output also in out/aurora_test.txt.
 
 set repo_dir [file normalize [file join [file dirname [info script]] ..]]
-set secs     [expr {$argc > 0 ? [lindex $argv 0] : 10}]
-set lb       [expr {$argc > 1 ? [lindex $argv 1] : 0}]
-set noprog   [expr {$argc > 2 && [lindex $argv 2] eq "noprog"}]
+set nums     [lsearch -all -inline -regexp $argv {^[0-9]+$}]
+set secs     [expr {[llength $nums] > 0 ? [lindex $nums 0] : 10}]
+set lb       [expr {[llength $nums] > 1 ? [lindex $nums 1] : 0}]
+set noprog   [expr {"noprog" in $argv}]
+set rev      [expr {"rev" in $argv ? 1 : "norev" in $argv ? 0 : -1}]
 set f_user   402.8320312e6                ;# the Aurora user clock (25.78125 Gb/s / 64), 256 bits a cycle
 
 file mkdir [file join $repo_dir out]
@@ -27,6 +32,7 @@ if {$noprog} {
     if {![file exists $b]} { set b [file join $repo_dir prebuilt rfsoc4x2_aurora.ltx] }
     set_property PROBES.FILE $b $dev; set_property FULL_PROBES.FILE $b $dev; refresh_hw_device $dev
 } else {
+    set prog_sourced 1
     source [file join $repo_dir scripts program.tcl]
 }
 set vio [lindex [get_hw_vios -of_objects [current_hw_device]] 0]
@@ -68,6 +74,7 @@ proc snapshot {} {
 
 # the link: the loopback, then the start-up sequence again (pma_init, then reset_pb)
 foreach n {vio_snap vio_clear vio_inject} { out $n 0 }
+out vio_rx_rev [expr {$rev == 1}]
 out vio_loopback $lb
 out vio_reset_pb 1; out vio_pma_init 1; after 1000
 out vio_pma_init 0; after 1000
@@ -80,8 +87,16 @@ if {![dict get $st up]} {
     say "RESULT: the channel did not come up"
     close $log; exit 1
 }
-for {set i 0} {$i < 50 && ![dict get $st locked]} {incr i} { after 100; set st [status] }
-say "PRBS31 checker locked [dict get $st locked]"
+for {set i 0} {$i < 30 && ![dict get $st locked]} {incr i} { after 100; set st [status] }
+if {![dict get $st locked] && $rev == -1} {
+    # the lanes possibly in reverse order (a loopback plug): the checker on the reversed word
+    out vio_rx_rev 1
+    for {set i 0} {$i < 30 && ![dict get $st locked]} {incr i} { after 100; set st [status] }
+    if {![dict get $st locked]} { out vio_rx_rev 0 }
+}
+refresh_hw_vio $vio
+set rv [get_property OUTPUT_VALUE [probe vio_rx_rev]]
+say "PRBS31 checker locked [dict get $st locked], received lanes [expr {$rv ? {in reverse order (TX lane l on RX lane 3 - l)} : {in order}}]"
 
 toggle vio_clear; after 100
 set p [snapshot]

@@ -19,7 +19,12 @@ initial begin
     inject <= 1; @(posedge clk); inject <= 0;
     for (n = 0; n < 2000; n = n + 1) begin ready <= ($random % 4) != 0; @(posedge clk); end
     $display("after the injection: locked %0d words %0d err_bits %0d err_words %0d lock_lost %0d", locked, words, eb, ew, ll);
-    $display("%s", locked && eb == 1 && ew == 1 && ll == 0 ? "PASS" : "FAIL");
+    // ... and with ready held high (as on the board: the request and the next word in the same cycle)
+    ready <= 1; repeat (20) @(posedge clk);
+    inject <= 1; @(posedge clk); inject <= 0;
+    repeat (200) @(posedge clk);
+    $display("after an injection with ready high: err_bits %0d err_words %0d", eb, ew);
+    $display("%s", locked && eb == 2 && ew == 2 && ll == 0 ? "PASS" : "FAIL");
     $finish;
 end
 endmodule

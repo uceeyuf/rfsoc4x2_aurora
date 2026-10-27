@@ -11,8 +11,11 @@ proc default_files {repo_dir} {
     return [list [file join $repo_dir prebuilt rfsoc4x2_aurora.bit] [file join $repo_dir prebuilt rfsoc4x2_aurora.ltx]]
 }
 lassign [default_files $repo_dir] bit ltx
-if {$argc > 0} { set bit [lindex $argv 0] }
-if {$argc > 1} { set ltx [lindex $argv 1] }
+# (sourced by tests/*.tcl, which set prog_sourced: their arguments are not file names)
+if {![info exists prog_sourced]} {
+    if {$argc > 0} { set bit [lindex $argv 0] }
+    if {$argc > 1} { set ltx [lindex $argv 1] }
+}
 
 open_hw_manager
 connect_hw_server -allow_non_jtag

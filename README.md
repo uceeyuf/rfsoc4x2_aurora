@@ -9,7 +9,7 @@
 
 Aurora 64B/66B on the RFSoC 4x2 (XCZU48DR-FFVG1517-2-E) QSFP28 port: **four lanes at 25.78125 Gb/s (100G), streaming, full duplex**, loaded with PRBS31 at the full channel rate and checked bit by bit on the receive side. JTAG only: no PS software, the link is controlled and read through a VIO (`tests/aurora_test.tcl`).
 
-The test setup is a 100GBASE-SR4 QSFP28 optical module (Intel SPTSBP2CLCKV) in optical self-loopback: each lane's transmitter comes back on its own receiver. The GTs' near-end PMA loopback is selectable for a check without a module.
+The test setup is a 100GBASE-SR4 QSFP28 optical module (Intel SPTSBP2CLCKV) in optical self-loopback (an MPO loopback plug: TX lane l comes back on RX lane 3 - l). The GTs' near-end PMA loopback is selectable for a check without a module.
 
 　
 
@@ -21,6 +21,7 @@ The test setup is a 100GBASE-SR4 QSFP28 optical module (Intel SPTSBP2CLCKV) in o
 * **Checker**: self-synchronizing until 64 error-free words, then locked to its own sequence so that a bit error counts once (not three times through the feedback taps); pipelined population count of the 256 error bits; 48-bit counters of words, bit errors and words with errors; lock losses, soft errors, hard errors and channel drops.
 * **Counters read without tearing**: the VIO (100 MHz) requests a snapshot, the user clock copies every counter at once and acknowledges; the rate is computed from the user clock cycles between snapshots.
 * **Self test**: one bit flipped at the transmitter on request; the test script expects exactly one counted error.
+* **Lane order**: Aurora 64B/66B deskews the four lanes but does not reorder them (the CMAC does, from its alignment markers). Through an SR4 module with an MPO loopback plug TX lane l comes back on RX lane 3 - l: the channel comes up, but the 256-bit words arrive with their four 64-bit lanes reversed. The checker can take the word reversed (VIO `rx_rev`); `tests/aurora_test.tcl` tries the straight order first and the reversed one if the checker does not lock. Between two boards over straight lanes no reversal is needed.
 * **QSFP28 sideband**: ResetL high, LPMode low (high power: the lasers on), ModSelL high (no I2C); ModPrsL and IntL are read in the VIO.
 
 　
@@ -36,7 +37,7 @@ vivado -mode batch -source tests/aurora_test.tcl -tclargs 60          # through 
 vivado -mode batch -source tests/aurora_test.tcl -tclargs 10 2        # GT near-end PMA loopback (no module needed)
 ```
 
-`tests/aurora_test.tcl` programs the FPGA, restarts the link (pma_init, then reset_pb), waits for channel up, clears the counters, prints the checked rate, the bit errors and the BER once a second, then injects one error and checks that it is counted. The output is also written to `out/aurora_test.txt`.
+Arguments: seconds, loopback (0 through the module, 2 near-end PMA), and the keywords `rev` / `norev` (the received lane order; default: straight, then reversed if the checker does not lock) and `noprog`. `tests/aurora_test.tcl` programs the FPGA, restarts the link (pma_init, then reset_pb), waits for channel up, finds the lane order, clears the counters, prints the checked rate, the bit errors and the BER once a second, then injects one error and checks that it is counted. The output is also written to `out/aurora_test.txt`.
 
 Build from source (creates `build/`, copies the result to `prebuilt/`):
 
@@ -91,7 +92,7 @@ BSD 3-Clause, Copyright (c) 2026 Yijie Yu. The Aurora 64B/66B, GT wizard and VIO
 
 RFSoC 4x2（XCZU48DR-FFVG1517-2-E）QSFP28 口上的 Aurora 64B/66B：**4 路 25.78125 Gb/s（100G），流模式，全双工**。发送端以满信道速率灌 PRBS31，接收端逐比特校验。只用 JTAG：不需要 PS 软件，链路的控制和读数都通过 VIO（`tests/aurora_test.tcl`）。
 
-测试环境是 100GBASE-SR4 QSFP28 光模块（Intel SPTSBP2CLCKV）光自环：每一路的发送回到它自己的接收。也可以选 GT 的近端 PMA 回环，不插模块先自检。
+测试环境是 100GBASE-SR4 QSFP28 光模块（Intel SPTSBP2CLCKV）光自环（MPO 回环头：TX 第 l 路回到 RX 第 3 - l 路）。也可以选 GT 的近端 PMA 回环，不插模块先自检。
 
 　
 
@@ -103,6 +104,7 @@ RFSoC 4x2（XCZU48DR-FFVG1517-2-E）QSFP28 口上的 Aurora 64B/66B：**4 路 25
 * **校验器**：先自同步，连续 64 个字无误后锁定到自己的序列，一个比特错误只计一次（不会经反馈抽头变成三个）；256 个误码位流水线计数；48 位计数器：字数、误码比特数、出错字数；另有失锁次数、软错误、硬错误、通道掉线计数。
 * **计数器无撕裂读取**：VIO（100 MHz）请求快照，用户时钟域一次复制所有计数器并应答；速率由两次快照之间的用户时钟周期数算出。
 * **自检**：可在发送端翻转一个比特；测试脚本要求正好计到一个错误。
+* **lane 顺序**：Aurora 64B/66B 只做四路的去偏斜，不重排 lane（CMAC 会按对齐标记重排）。经过 SR4 模块和 MPO 回环头时，TX 第 l 路回到 RX 第 3 - l 路：通道能建立，但 256 bit 字里四个 64 bit 的 lane 是倒序的。校验器可以把字倒过来再比（VIO `rx_rev`）；`tests/aurora_test.tcl` 先试正序，锁不上再试倒序。两块板之间用直通 lane 连接时不需要倒序。
 * **QSFP28 控制脚**：ResetL 拉高，LPMode 拉低（高功率模式：激光打开），ModSelL 拉高（不用 I2C）；ModPrsL 和 IntL 从 VIO 读。
 
 　
@@ -118,7 +120,7 @@ vivado -mode batch -source tests/aurora_test.tcl -tclargs 60          # 经过 Q
 vivado -mode batch -source tests/aurora_test.tcl -tclargs 10 2        # GT 近端 PMA 回环（不需要模块）
 ```
 
-`tests/aurora_test.tcl` 下载 FPGA，重启链路（先 pma_init，再 reset_pb），等通道建立，清零计数器，每秒打印校验速率、误码比特和误码率，最后注入一个错误并确认被计到。输出同时写到 `out/aurora_test.txt`。
+参数依次是：秒数、回环（0 经过模块，2 近端 PMA），以及关键字 `rev` / `norev`（接收 lane 顺序；默认先正序，校验器锁不上再倒序）和 `noprog`。`tests/aurora_test.tcl` 下载 FPGA，重启链路（先 pma_init，再 reset_pb），等通道建立，确定 lane 顺序，清零计数器，每秒打印校验速率、误码比特和误码率，最后注入一个错误并确认被计到。输出同时写到 `out/aurora_test.txt`。
 
 从源码构建（生成 `build/`，结果复制到 `prebuilt/`）：
 
