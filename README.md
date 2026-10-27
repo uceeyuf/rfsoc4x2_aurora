@@ -26,6 +26,21 @@ The test setup is a 100GBASE-SR4 QSFP28 optical module (Intel SPTSBP2CLCKV) in o
 
 　
 
+## Test Results
+
+Intel SPTSBP2CLCKV (100GBASE-SR4) with an MPO loopback plug, Vivado 2023.2:
+
+| Test | Lane order | Checked rate | Bits | Bit errors | BER | Soft / hard errors, drops |
+| :--- | :--------: | :----------: | :--: | :--------: | :-: | :-----------------------: |
+| Optical loopback, 60 s | reversed (found automatically) | **99.837 Gb/s** | 6.008e12 | 0 | < 1.7e-13 | 0 / 0, 0 |
+| GT near-end PMA loopback, 10 s | straight | 99.837 Gb/s | 1.015e12 | 0 | < 9.9e-13 | 0 / 0, 0 |
+
+In both runs the injected error was counted once, and the checker lost lock 0 times.
+
+Through the plug the checker locks only on the reversed lane order (TX lane l on RX lane 3 - l, as [rfsoc4x2_ibert](https://github.com/uceeyuf/rfsoc4x2_ibert) maps it). 99.837 Gb/s is the 100.0 Gb/s of payload less the clock-correction sequences the channel inserts.
+
+　
+
 ## Build and Run
 
 Vivado 2023.2. The prebuilt bitstream and probes file are in `prebuilt/`, so the board can be tested without building (Vivado Lab Edition is enough):
@@ -106,6 +121,21 @@ RFSoC 4x2（XCZU48DR-FFVG1517-2-E）QSFP28 口上的 Aurora 64B/66B：**4 路 25
 * **自检**：可在发送端翻转一个比特；测试脚本要求正好计到一个错误。
 * **lane 顺序**：Aurora 64B/66B 只做四路的去偏斜，不重排 lane（CMAC 会按对齐标记重排）。经过 SR4 模块和 MPO 回环头时，TX 第 l 路回到 RX 第 3 - l 路：通道能建立，但 256 bit 字里四个 64 bit 的 lane 是倒序的。校验器可以把字倒过来再比（VIO `rx_rev`）；`tests/aurora_test.tcl` 先试正序，锁不上再试倒序。两块板之间用直通 lane 连接时不需要倒序。
 * **QSFP28 控制脚**：ResetL 拉高，LPMode 拉低（高功率模式：激光打开），ModSelL 拉高（不用 I2C）；ModPrsL 和 IntL 从 VIO 读。
+
+　
+
+## 测试结果
+
+Intel SPTSBP2CLCKV（100GBASE-SR4）加 MPO 回环头，Vivado 2023.2：
+
+| 测试 | lane 顺序 | 校验速率 | 比特数 | 误码比特 | 误码率 | 软 / 硬错误、掉线 |
+| :--- | :-------: | :------: | :----: | :------: | :----: | :---------------: |
+| 光回环，60 秒 | 倒序（自动识别） | **99.837 Gb/s** | 6.008e12 | 0 | < 1.7e-13 | 0 / 0、0 |
+| GT 近端 PMA 回环，10 秒 | 正序 | 99.837 Gb/s | 1.015e12 | 0 | < 9.9e-13 | 0 / 0、0 |
+
+两次测试中注入的错误都正好计到一次，校验器失锁 0 次。
+
+经过回环头时校验器只在 lane 倒序下锁定（TX 第 l 路回到 RX 第 3 - l 路，与 [rfsoc4x2_ibert](https://github.com/uceeyuf/rfsoc4x2_ibert) 测出的映射一致）。99.837 Gb/s 是 100.0 Gb/s 净荷减去通道插入的时钟补偿序列。
 
 　
 

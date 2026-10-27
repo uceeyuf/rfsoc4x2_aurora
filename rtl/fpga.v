@@ -144,12 +144,18 @@ wire [7:0] st_s;
 xpm_cdc_array_single #(.DEST_SYNC_FF(3), .INIT_SYNC_FF(1), .SRC_INPUT_REG(0), .WIDTH(8)) st_cdc (.src_clk(1'b0), .src_in(st_u), .dest_clk(clk100), .dest_out(st_s));
 wire ack_s;
 xpm_cdc_single #(.DEST_SYNC_FF(3), .INIT_SYNC_FF(1), .SRC_INPUT_REG(0)) ack_cdc (.src_clk(1'b0), .src_in(snap_ack), .dest_clk(clk100), .dest_out(ack_s));
-wire [7:0] st100 = {qsfp0_intl, qsfp0_modprsl, mmcm_not_locked, gt_pll_lock, vio_rx_rev, pma_init, reset_pb, ack_s};
+// (registered, kept: the VIO's probes then are these two 8-bit buses by name; unregistered, with a VIO output among the
+// bits, the probes file split st100 into its source nets and tests/aurora_test.tcl found no st100, 2026-10-27)
+(* keep = "true" *) reg [7:0] st100 = 8'd0, st_r = 8'd0;
+always @(posedge clk100) begin
+    st100 <= {qsfp0_intl, qsfp0_modprsl, mmcm_not_locked, gt_pll_lock, vio_rx_rev, pma_init, reset_pb, ack_s};
+    st_r  <= st_s;
+end
 
 vio_aurora vio_i (
     .clk(clk100),
-    .probe_in0(st_s),           // {locked, hard_err, soft_err, channel_up, lane_up 0..3}
-    .probe_in1(st100),          // {intl, modprsl, mmcm_not_locked, gt_pll_lock, 0, pma_init, reset_pb, snap_ack}
+    .probe_in0(st_r),           // {locked, hard_err, soft_err, channel_up, lane_up 0..3}
+    .probe_in1(st100),          // {intl, modprsl, mmcm_not_locked, gt_pll_lock, rx_rev, pma_init, reset_pb, snap_ack}
     .probe_in2(s_uptime),
     .probe_in3(s_tx),
     .probe_in4(s_rx_all),

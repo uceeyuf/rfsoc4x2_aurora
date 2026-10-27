@@ -49,7 +49,7 @@ proc out {name value} {
 }
 proc in {name} { global vio; refresh_hw_vio $vio; return [get_property INPUT_VALUE [probe $name]] }
 proc status {} {
-    set s [in st_s]; set t [in st100]
+    set s [in st_r]; set t [in st100]
     return [dict create locked [expr {($s >> 7) & 1}] hard [expr {($s >> 6) & 1}] soft [expr {($s >> 5) & 1}] \
         up [expr {($s >> 4) & 1}] lanes [format %d%d%d%d [expr {($s >> 3) & 1}] [expr {($s >> 2) & 1}] [expr {($s >> 1) & 1}] [expr {$s & 1}]] \
         intl [expr {($t >> 7) & 1}] modprsl [expr {($t >> 6) & 1}] pll_lock [expr {($t >> 4) & 1}] ack [expr {$t & 1}]]
