@@ -1,0 +1,12 @@
+# Vivado project / outputs (recreate with scripts/create_project.tcl); prebuilt/ holds the released bitstream
+build/
+.Xil/
+*.jou
+*.log
+*.str
+webtalk*
+vivado_pid*.zip
+xsim.dir/
+*.pb
+*.wdb
+out/

@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite it as below."
+type: software
+title: "RFSoC 4x2 100G Aurora 64B/66B over QSFP28"
+authors:
+  - family-names: "Yu"
+    given-names: "Yijie"
+repository-code: "https://github.com/uceeyuf/rfsoc4x2_aurora"
+url: "https://github.com/uceeyuf/rfsoc4x2_aurora"
+date-released: 2026-10-27
+license: BSD-3-Clause
+keywords:
+  - "RFSoC"
+  - "QSFP28"
+  - "GTY"
+  - "Aurora"
+  - "64B/66B"
+  - "100G"
+  - "FPGA"
